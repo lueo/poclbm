@@ -940,7 +940,7 @@ class MinerTab(wx.Panel):
         # -d <device appear in pyopencl>
         # -l <log message period in second>
         # -T <disable curses interface and output to console (stdout)>
-        cmd = "%s -u %s -p %s -o http://%s:%s -d %s -l 1 -T %s" % (
+        cmd = "%s -u %s -p %s -o http://%s:%s -d %s -l 1 -T --no-adl %s" % (
             path,
             self.txt_username.GetValue(),
             self.txt_pass.GetValue(),
