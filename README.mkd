@@ -1,3 +1,7 @@
+poclbm - Pyopencl Bitcoin Miner
+===
+
+```
 Usage: poclbm.py [OPTION]... SERVER[#tag]...
 SERVER is one or more [http[s]://]user:pass@host:port          (required)
 [#tag] is a per SERVER user friendly name displayed in stats   (optional)
@@ -40,3 +44,4 @@ Options:
     -s FRAMESLEEP, --sleep=FRAMESLEEP
                         sleep per frame in seconds, default 0
     -v, --vectors       use vectors
+```
