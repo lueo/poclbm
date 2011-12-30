@@ -5,6 +5,8 @@ Currently supports:
 - puddinpop's "rpcminer"
 - jedi95's "Phoenix"
 - ufasoft's "bitcoin-miner"
+- ckolivas's "cgminer"
+- DiabloD3's "DiabloMiner"
 
 Copyright 2011 Chris MacLeod
 This program is released under the GNU GPL. See LICENSE.txt for details.
@@ -24,7 +26,7 @@ from wx.lib.agw import flatnotebook as fnb
 from wx.lib.agw import hyperlink
 from wx.lib.newevent import NewEvent
 
-__version__ = '2011-11-22'
+__version__ = '2011-12-30'
 
 def get_module_path():
     """Return the folder containing this script (or its .exe)."""
@@ -514,6 +516,17 @@ class CgListenerThread(MinerListenerThread):
             lambda _: None), # Just ignore lines like these
     ]
     
+class DiabloListenerThread(MinerListenerThread):
+    LINES = [
+        (r"accepted block",
+            lambda _: UpdateAcceptedEvent(accepted=True)),
+        (r"rejected block", lambda _:
+            UpdateAcceptedEvent(accepted=False)),
+        (r"mhash: (\d+\.\d+)", lambda match:
+            UpdateHashRateEvent(rate=float(match.group(1)) * 1000)),
+        (r"Waiting",
+            lambda _: None), # Just ignore lines like these
+    ]
 
 class MinerTab(wx.Panel):
     """A tab in the GUI representing a miner instance.
@@ -950,6 +963,28 @@ class MinerTab(wx.Panel):
             self.txt_flags.GetValue())
         return cmd, os.path.dirname(self.external_path)
 
+    def configure_subprocess_diablominer(self):
+        """Set up the command line for diablominer."""
+        path = self.external_path
+        if path.endswith('.java'):
+            path = "java " + path
+
+        # Command line arguments for diablominer here:
+        # -u <username>
+        # -p <password>
+        # -o <server.ip>
+        # -r <port>
+        # -D <device appear in opencl>
+        cmd = "%s -u %s -p %s -o %s -r %s -D %s %s" % (
+            path,
+            self.txt_username.GetValue(),
+            self.txt_pass.GetValue(),
+            self.host_without_http_prefix,
+            self.txt_port.GetValue(),
+            self.device_index + 1, # Diablo count opencl device from 1, pyopencl count from 0
+            self.txt_flags.GetValue())
+        return cmd, os.path.dirname(self.external_path)
+
     # End backend specific code
     ###########################
 
@@ -977,6 +1012,9 @@ class MinerTab(wx.Panel):
         elif "cgminer" in self.external_path:
             conf_func = self.configure_subprocess_cgminer
             listener_cls = CgListenerThread
+        elif ("diablominer" in self.external_path) or ("DiabloMiner" in self.external_path):
+            conf_func = self.configure_subprocess_diablominer
+            listener_cls = DiabloListenerThread
 
         else:
             raise ValueError # TODO: handle unrecognized miner
@@ -1027,7 +1065,7 @@ class MinerTab(wx.Panel):
         """Terminate the poclbm process if able and its associated listener."""
         if self.miner is not None:
             if self.miner.returncode is None:
-                # It didn't return yet so it's still running.
+                # It didn,'t return yet so it's still running.
                 try:
                     self.miner.terminate()
                 except OSError:
@@ -1039,6 +1077,7 @@ class MinerTab(wx.Panel):
         self.is_mining = False
         self.is_paused = False
         self.set_status(STR_STOPPED, 1)
+        self.update_khash(0)
         self.start.SetLabel(self.get_start_label())
 
     def update_khash(self, rate):
@@ -1169,7 +1208,9 @@ class MinerTab(wx.Panel):
         add_tooltip(self.txt_pass, _("The miner's password.\nMay be different than your account password."))
         add_tooltip(self.txt_flags, _("""Extra flags to pass to the miner.
 For poclbm use -v -w 128 for dedicated mining, append -f 60 for desktop usage.
-For cgminer use -I 8 or -I 9. Without any params for desktop usage."""))
+For cgminer use -I 8 or -I 9. Without any params for desktop usage.
+For Phoenix try -k phatk BFI_INT FASTLOOP=false VECTORS WORKSIZE=128 AGGRESSION=12
+For Diablominer try -v 2 -w 128 -a"""))
         for chk in self.affinity_chks:
             add_tooltip(chk, _("CPU cores used for mining.\nUnchecking some cores can reduce high CPU usage in some systems."))
 
@@ -1676,13 +1717,14 @@ class GUIMiner(wx.Frame):
         self.do_show_opencl_warning = self.config_data.get('show_opencl_warning', True)
         self.console_max_lines = self.config_data.get('console_max_lines', 5000)
 
-        ID_NEW_EXTERNAL, ID_NEW_PHOENIX, ID_NEW_CGMINER, ID_NEW_CUDA, ID_NEW_UFASOFT = wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId()
+        ID_NEW_EXTERNAL, ID_NEW_PHOENIX, ID_NEW_CGMINER, ID_NEW_DIABLOMINER, ID_NEW_CUDA, ID_NEW_UFASOFT = wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId(), wx.NewId()
         self.menubar = wx.MenuBar()
         file_menu = wx.Menu()
         new_menu = wx.Menu()
         new_menu.Append(wx.ID_NEW, _("&New OpenCL miner..."), _("Create a new OpenCL miner (default for ATI cards)"), wx.ITEM_NORMAL)
         new_menu.Append(ID_NEW_PHOENIX, _("New Phoenix miner..."), _("Create a new Phoenix miner (for some ATI cards)"), wx.ITEM_NORMAL)
-        new_menu.Append(ID_NEW_CGMINER, _("New CG miner..."), _("Create a new CGMiner (for some ATI cards)"), wx.ITEM_NORMAL)
+        new_menu.Append(ID_NEW_CGMINER, _("New CG miner..."), _("Create a new CG miner (for some ATI cards)"), wx.ITEM_NORMAL)
+        new_menu.Append(ID_NEW_DIABLOMINER, _("New Diablo miner..."), _("Create a new Diablo miner (for some ATI cards)"), wx.ITEM_NORMAL)
         new_menu.Append(ID_NEW_CUDA, _("New CUDA miner..."), _("Create a new CUDA miner (for NVIDIA cards)"), wx.ITEM_NORMAL)
         new_menu.Append(ID_NEW_UFASOFT, _("New Ufasoft CPU miner..."), _("Create a new Ufasoft miner (for CPUs)"), wx.ITEM_NORMAL)
         new_menu.Append(ID_NEW_EXTERNAL, _("New &other miner..."), _("Create a new custom miner (requires external program)"), wx.ITEM_NORMAL)
@@ -1755,6 +1797,7 @@ class GUIMiner(wx.Frame):
         self.Bind(wx.EVT_MENU, self.name_new_profile, id=wx.ID_NEW)
         self.Bind(wx.EVT_MENU, self.new_phoenix_profile, id=ID_NEW_PHOENIX)
         self.Bind(wx.EVT_MENU, self.new_cgminer_profile, id=ID_NEW_CGMINER)
+        self.Bind(wx.EVT_MENU, self.new_diablominer_profile, id=ID_NEW_DIABLOMINER)
         self.Bind(wx.EVT_MENU, self.new_ufasoft_profile, id=ID_NEW_UFASOFT)
         self.Bind(wx.EVT_MENU, self.new_cuda_profile, id=ID_NEW_CUDA)
         self.Bind(wx.EVT_MENU, self.new_external_profile, id=ID_NEW_EXTERNAL)
@@ -1873,6 +1916,11 @@ class GUIMiner(wx.Frame):
     def new_cgminer_profile(self, event):
         """Create a new miner using the Cgminer OpenCL miner backend."""
         path = os.path.join(get_module_path(), 'cgminer.exe')
+        self.name_new_profile(extra_profile_data=dict(external_path=path))
+
+    def new_diablominer_profile(self, event):
+        """Create a new miner using the Cgminer OpenCL miner backend."""
+        path = os.path.join(get_module_path(), 'DiabloMiner-Windows.exe')
         self.name_new_profile(extra_profile_data=dict(external_path=path))
 
     def new_ufasoft_profile(self, event):
